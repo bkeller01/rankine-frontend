@@ -1667,6 +1667,11 @@
             const handleEqComponentClick = (name) => {
                 setActiveEqComponent(name);
                 setEqBuilderClicks([]);
+                setEquationAttempts(prev => {
+                    const next = { ...prev };
+                    delete next[name];
+                    return next;
+                });
             };
 
             const handleEqHClick = (stateNum) => {
@@ -2015,7 +2020,7 @@
                     : 'Drag FROM pink cells TO connected cells via ISO processes to identify derivable values';
                 if (phase === 'solve-states') return 'Click on a state header to select it. CoolProp needs exactly 2 known properties to find any other property at that state — click the property you want to Find first, then click the 2 properties you\'ll use to get it. You can queue up more than one property to find (reusing the same 2 known properties) before hitting Solve, to calculate several at once. Once a property is solved, you can also drag it across an ISO connection to fill the matching cell at the next state directly — no need to re-solve a value you already know.';
                 if (phase === 'work-heat-id') return 'Drag each pill onto the component it describes. A pill can be used more than once.';
-                if (phase === 'energy-equations') return hOnlyView ? 'Click a component to select it, then click its h-before state and its h-after state.' : 'To solve further, we only need enthalpy (h) at each state.';
+                if (phase === 'energy-equations') return hOnlyView ? "Click a component's equation box to select it, then click its h-before state and its h-after state." : 'To solve further, we only need enthalpy (h) at each state.';
                 if (phase === 'cycle-performance') return 'Drag each energy term into the equation it belongs to. One term isn\'t needed for either.';
                 return '';
             };
@@ -3082,6 +3087,12 @@
                             <p className="text-gray-600 mb-4">
                                 Pressure, temperature, entropy, and quality did their job getting us here — from this point on, the energy balance only involves h. Let's simplify the table down to just that.
                             </p>
+                            <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-4 mb-4 text-left max-w-2xl mx-auto">
+                                <p className="text-indigo-900 font-semibold mb-1">Building each component's equation:</p>
+                                <p className="text-indigo-800 text-sm">
+                                    Click a component's equation box in the table (it currently just shows its category, like "+w PUMP") to select it. Then click the h-value at the state right before that component, followed by the state right after it. That builds the energy balance for that component — repeat for all six, then check your work.
+                                </p>
+                            </div>
                             {!hOnlyView ? (
                                 <button
                                     onClick={() => setHOnlyView(true)}
@@ -3128,6 +3139,11 @@
                                             <p className="text-red-700 font-semibold mb-3">
                                                 Something's not quite right yet.
                                             </p>
+                                            {eqRevealTier >= 1 && (
+                                                <p className="text-gray-600 text-sm mb-3">
+                                                    Click a flagged component's label above the table to rebuild its equation, then check again.
+                                                </p>
+                                            )}
                                             <div className="flex gap-3 justify-center flex-wrap">
                                                 {eqRevealTier < 1 && (
                                                     <button
@@ -3988,16 +4004,17 @@
                                         const afterFlagged = isWrong && eqRevealTier >= 2 && !checkResult.afterCorrect;
 
                                         let ringClass = '';
-                                        if (isCorrect) ringClass = 'ring-2 ring-green-500';
+                                        if (isActive) ringClass = 'ring-2 ring-orange-200';
+                                        else if (isCorrect) ringClass = 'ring-2 ring-green-500';
                                         else if (isWrong && eqRevealTier >= 1) ringClass = 'ring-2 ring-red-400';
-                                        else if (isActive) ringClass = 'ring-2 ring-orange-200';
 
                                         return (
                                             <React.Fragment key={comp}>
                                                 <td className="text-center">
                                                     {cat && (
                                                         <span
-                                                            className={`inline-block whitespace-nowrap px-2 py-1 rounded-full text-xs font-bold border-2 ${ringClass}`}
+                                                            onClick={isEqPhase ? () => handleEqComponentClick(comp) : undefined}
+                                                            className={`inline-block whitespace-nowrap px-2 py-1 rounded-full text-xs font-bold border-2 ${ringClass} ${isEqPhase ? 'cursor-pointer hover:ring-2 hover:ring-orange-300' : ''}`}
                                                             style={{ backgroundColor: style.bg, borderColor: style.border, color: style.text }}
                                                         >
                                                             {energyResults && energyResults[comp] !== undefined ? (
@@ -4201,7 +4218,6 @@
 
             const isEqPhase = phase === 'energy-equations';
             const isActive = isEqPhase && hasComponent && activeEqComponent === placement;
-            const isClickableForEq = isEqPhase && hasComponent;
             
             let slotClass = "px-2 py-1 text-sm font-semibold text-center rounded-lg transition min-h-[24px] flex items-center justify-center";
             // Uniform width matching widest component (CONDENSER = 100px)
@@ -4214,9 +4230,6 @@
                 slotClass += " bg-white border-2 border-dashed border-gray-300 text-gray-300";
             }
 
-            if (isClickableForEq) {
-                slotClass += " cursor-pointer hover:ring-2 hover:ring-orange-300";
-            }
             if (isActive) {
                 slotClass += " ring-4 ring-orange-400";
             }
@@ -4230,7 +4243,6 @@
                 <th
                     className={slotClass}
                     style={customStyle}
-                    onClick={isClickableForEq ? () => handleEqComponentClick(placement) : undefined}
                 >
                     {hasComponent ? placement : ''}
                 </th>
