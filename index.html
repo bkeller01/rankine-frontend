@@ -1916,7 +1916,7 @@
                     : 'Drag FROM pink cells TO connected cells via ISO processes to identify derivable values';
                 if (phase === 'solve-states') return 'Click on a state header to select it. CoolProp needs exactly 2 known properties to find any other property at that state — click the property you want to Find first, then click the 2 properties you\'ll use to get it. You can queue up more than one property to find (reusing the same 2 known properties) before hitting Solve, to calculate several at once. Once a property is solved, you can also drag it across an ISO connection to fill the matching cell at the next state directly — no need to re-solve a value you already know.';
                 if (phase === 'work-heat-id') return 'Drag each pill onto the component it describes. A pill can be used more than once.';
-                if (phase === 'energy-equations') return hOnlyView ? "Click a component's header to start it - empty pills appear below. Click its h-before state, click the header again to place the term, then click its h-after state." : 'To solve further, we only need enthalpy (h) at each state.';
+                if (phase === 'energy-equations') return hOnlyView ? "Click a component's header to start it - empty pills appear below. Click its h-before state, click its +w/+q tag to place the term, then click its h-after state." : 'To solve further, we only need enthalpy (h) at each state.';
                 if (phase === 'cycle-performance') return 'Drag each energy term into the equation it belongs to. One term isn\'t needed for either.';
                 return '';
             };
@@ -2985,7 +2985,7 @@
                             <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-4 mb-4 text-left max-w-2xl mx-auto">
                                 <p className="text-indigo-900 font-semibold mb-1">Building each component's equation:</p>
                                 <p className="text-indigo-800 text-sm">
-                                    Click a component's colored tag (e.g. "PUMP") to start on it — empty pills appear below the table, centered under that component. Then click the h-value at the state right before it to fill the first pill, click the component's tag again to drop its term into the second pill, and click the h-value at the state right after it. That builds the energy balance for that component — repeat for all six, then check your work.
+                                    Click a component's colored header (e.g. "PUMP") to start on it — empty pills appear below the table, centered under that component. Then click the h-value at the state right before it to fill the first pill, click the component's "+w_p"-style tag (above, in the table header) to drop its term into the second pill, and click the h-value at the state right after it. That builds the energy balance for that component — repeat for all six, then check your work.
                                 </p>
                             </div>
                             {!hOnlyView ? (
@@ -3347,6 +3347,7 @@
                             eqCheckResult={eqCheckResult}
                             eqRevealTier={eqRevealTier}
                             handleEqComponentClick={handleEqComponentClick}
+                            handleEqTermClick={handleEqTermClick}
                             handleEqHClick={handleEqHClick}
                             eqTermPlaced={eqTermPlaced}
                             isoConnections={isoConnections}
@@ -3728,7 +3729,7 @@
             );
         }
 
-        function TableView({ phase, isoSubStep, componentPlacements, energyPlacements, energyResults, hOnlyView, activeEqComponent, eqBuilderClicks, equationAttempts, eqCheckResult, eqRevealTier, handleEqComponentClick, handleEqHClick, eqTermPlaced, isoConnections, previewConnection, pinkHighlights, blueHighlights, calculatedCells, givenValues, selectedState, clickedCells, solveQueue, currentFind, currentUsing, handleStateClick, handleCellClickForSolving, handleDrop, handleDragOver, handleDragStart, handleMouseEnter, handleMouseLeave, handleDragEnd, dragFromCell, mousePosition, hoveredCell }) {
+        function TableView({ phase, isoSubStep, componentPlacements, energyPlacements, energyResults, hOnlyView, activeEqComponent, eqBuilderClicks, equationAttempts, eqCheckResult, eqRevealTier, handleEqComponentClick, handleEqHClick, handleEqTermClick, eqTermPlaced, isoConnections, previewConnection, pinkHighlights, blueHighlights, calculatedCells, givenValues, selectedState, clickedCells, solveQueue, currentFind, currentUsing, handleStateClick, handleCellClickForSolving, handleDrop, handleDragOver, handleDragStart, handleMouseEnter, handleMouseLeave, handleDragEnd, dragFromCell, mousePosition, hoveredCell }) {
             const tableRef = React.useRef(null);
             
             return (
@@ -3844,12 +3845,16 @@
 
                                         const isSolved = energyResults && energyResults[comp] !== undefined;
 
-                                        // This tag is pure display now - the actual build happens in the
-                                        // pill row that appears below the h-values, centered under this
-                                        // component. It only reacts once the attempt has been committed
-                                        // (and later, checked).
+                                        // This tag is otherwise inert during the build - nothing about
+                                        // its appearance changes until the before-h has been clicked and
+                                        // it becomes the expected next click (placing the term), or just
+                                        // after. The actual before/term/after pills fill in separately,
+                                        // in the row below the h-values, centered under this component.
+                                        const isTermClickable = isEqPhase && isActive && eqBuilderClicks.length === 1 && !eqTermPlaced;
+
                                         let ringClass = '';
-                                        if (isCorrect) ringClass = 'ring-2 ring-green-500';
+                                        if (isTermClickable) ringClass = 'ring-2 ring-orange-400 animate-pulse';
+                                        else if (isCorrect) ringClass = 'ring-2 ring-green-500';
                                         else if (isWrong && eqRevealTier >= 1) ringClass = 'ring-2 ring-red-400';
                                         else if (isActive) ringClass = 'ring-2 ring-orange-300';
 
@@ -3858,7 +3863,8 @@
                                                 <td className="text-center">
                                                     {cat && (
                                                         <span
-                                                            className={`inline-block whitespace-nowrap px-2 py-1 rounded-full text-xs font-bold border-2 ${ringClass}`}
+                                                            onClick={isTermClickable ? () => handleEqTermClick(comp) : undefined}
+                                                            className={`inline-block whitespace-nowrap px-2 py-1 rounded-full text-xs font-bold border-2 ${ringClass} ${isTermClickable ? 'cursor-pointer hover:ring-2 hover:ring-orange-300' : ''}`}
                                                             style={{ backgroundColor: style.bg, borderColor: style.border, color: style.text }}
                                                         >
                                                             {isSolved ? (
