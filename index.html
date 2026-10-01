@@ -23,6 +23,17 @@
             background-color: white !important;
         }
 
+        /* Pop/slide animation for the Solve Energy Values equation-box
+           transitions (substitute values -> rearrange -> solved). */
+        @keyframes energyBoxPop {
+            0% { transform: scale(0.85) translateX(-6px); opacity: 0.35; }
+            60% { transform: scale(1.12) translateX(0); opacity: 1; }
+            100% { transform: scale(1) translateX(0); opacity: 1; }
+        }
+        .energy-box-animate {
+            animation: energyBoxPop 0.5s ease-out;
+        }
+
     </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
@@ -844,164 +855,6 @@
             'Heat Out': '\u2212',
         };
 
-        // Animates the six energy-category tags flying from their positions on the loop
-        // diagram down into a new row in the table, reusing the same move/hover/crossfade/bounce
-        // treatment as UnfoldAnimation for visual consistency.
-        // Lets the student drag the known term(s) across the equals sign to isolate the energy
-        // variable, then reveals the real computed value. "Plus" categories (Work In / Heat In)
-        // need one drag; "minus" categories (Work Out / Heat Out) need two, since the unknown
-        // starts trapped between a minus sign and a known term.
-        function EnergyRearrange({ comp, eq, sign, abbrev, hBeforeVal, hAfterVal, onComplete }) {
-            const isPlus = sign === '+';
-            const maxStage = isPlus ? 1 : 2;
-            const [stage, setStage] = useState(0);
-            const [dragDx, setDragDx] = useState(0);
-            const draggingRef = React.useRef(false);
-            const startXRef = React.useRef(0);
-            const dxRef = React.useRef(0);
-            const cleanupRef = React.useRef(null);
-            const THRESHOLD = 60;
-
-            // Drag tracking lives on `window`, not on the tile itself. Tracking it locally
-            // (via onPointerMove/onPointerUp on the small tile element) is fragile: once the
-            // pointer travels far enough to pass over a sibling tile, the browser can quietly
-            // reinterpret the gesture as a text-selection drag or trackpad pan and simply stop
-            // delivering move/up events to the original element - which looks exactly like a
-            // drag that "gets stuck" and won't even release. Listening on window sidesteps that
-            // entirely: it doesn't matter what's visually underneath the pointer.
-            React.useEffect(() => {
-                return () => { if (cleanupRef.current) cleanupRef.current(); };
-            }, []);
-
-            const handleDown = (dir) => (e) => {
-                e.preventDefault();
-                draggingRef.current = true;
-                startXRef.current = e.clientX;
-
-                const onMove = (ev) => {
-                    if (!draggingRef.current) return;
-                    const dx = ev.clientX - startXRef.current;
-                    const clamped = dir === 'right' ? Math.max(0, dx) : Math.min(0, dx);
-                    dxRef.current = clamped;
-                    setDragDx(clamped);
-                };
-                const onUp = () => {
-                    if (!draggingRef.current) return;
-                    draggingRef.current = false;
-                    const passed = dir === 'right' ? dxRef.current > THRESHOLD : dxRef.current < -THRESHOLD;
-                    dxRef.current = 0;
-                    setDragDx(0);
-                    if (passed) setStage(s => s + 1);
-                    window.removeEventListener('pointermove', onMove);
-                    window.removeEventListener('pointerup', onUp);
-                    window.removeEventListener('pointercancel', onUp);
-                    cleanupRef.current = null;
-                };
-
-                window.addEventListener('pointermove', onMove);
-                window.addEventListener('pointerup', onUp);
-                window.addEventListener('pointercancel', onUp);
-                cleanupRef.current = () => {
-                    window.removeEventListener('pointermove', onMove);
-                    window.removeEventListener('pointerup', onUp);
-                    window.removeEventListener('pointercancel', onUp);
-                };
-            };
-
-            const Tile = ({ children, draggable, dir, accent }) => (
-                <div
-                    onPointerDown={draggable ? handleDown(dir) : undefined}
-                    style={{
-                        display: 'inline-block',
-                        padding: '8px 14px',
-                        borderRadius: '8px',
-                        background: accent ? '#dbeafe' : '#f3f4f6',
-                        border: accent ? '2px solid #1e40af' : '2px solid #9ca3af',
-                        color: accent ? '#1e3a8a' : '#1f2937',
-                        cursor: draggable ? 'grab' : 'default',
-                        transform: draggable ? `translateX(${dragDx}px)` : undefined,
-                        userSelect: 'none',
-                        touchAction: draggable ? 'none' : undefined,
-                    }}
-                >
-                    {children}
-                </div>
-            );
-            const Line = () => <div style={{ width: 2, height: 36, background: '#9ca3af' }} />;
-
-            let content;
-            let hint;
-            if (!isPlus && stage === 0) {
-                content = (
-                    <div className="flex items-center justify-center gap-2 text-xl font-semibold">
-                        <Tile>h{eq.before}</Tile><span>&minus;</span>
-                        <Tile draggable dir="right" accent>{abbrev}</Tile>
-                        <Line />
-                        <Tile>h{eq.after}</Tile>
-                    </div>
-                );
-                hint = `Drag ${abbrev} across the line`;
-            } else if (!isPlus && stage === 1) {
-                content = (
-                    <div className="flex items-center justify-center gap-2 text-xl font-semibold">
-                        <Tile>h{eq.before}</Tile>
-                        <Line />
-                        <Tile draggable dir="left">h{eq.after}</Tile><span>+</span>
-                        <Tile accent>{abbrev}</Tile>
-                    </div>
-                );
-                hint = `Now drag h${eq.after} across the line to join it with h${eq.before}`;
-            } else if (isPlus && stage === 0) {
-                content = (
-                    <div className="flex items-center justify-center gap-2 text-xl font-semibold">
-                        <Tile draggable dir="right">h{eq.before}</Tile><span>+</span>
-                        <Tile accent>{abbrev}</Tile>
-                        <Line />
-                        <Tile>h{eq.after}</Tile>
-                    </div>
-                );
-                hint = `Drag h${eq.before} across the line`;
-            } else if (isPlus) {
-                content = (
-                    <div className="flex items-center justify-center gap-2 text-xl font-semibold">
-                        <Tile accent>{abbrev}</Tile>
-                        <Line />
-                        <Tile>h{eq.after}</Tile><span>&minus;</span>
-                        <Tile>h{eq.before}</Tile>
-                    </div>
-                );
-                hint = `Isolated: ${abbrev} = h${eq.after} \u2212 h${eq.before}`;
-            } else {
-                content = (
-                    <div className="flex items-center justify-center gap-2 text-xl font-semibold">
-                        <Tile accent>{abbrev}</Tile>
-                        <Line />
-                        <Tile>h{eq.before}</Tile><span>&minus;</span>
-                        <Tile>h{eq.after}</Tile>
-                    </div>
-                );
-                hint = `Isolated: ${abbrev} = h${eq.before} \u2212 h${eq.after}`;
-            }
-
-            const isIsolated = stage === maxStage;
-            const result = isPlus ? (hAfterVal - hBeforeVal) : (hBeforeVal - hAfterVal);
-
-            return (
-                <div>
-                    {content}
-                    <p className="text-gray-500 text-sm mt-3">{hint}</p>
-                    {isIsolated && (
-                        <button
-                            onClick={() => onComplete(comp, result.toFixed(1))}
-                            className="mt-4 bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg"
-                        >
-                            Plug in the numbers
-                        </button>
-                    )}
-                </div>
-            );
-        }
-
         // Cycle Performance phase: drag the six known energy terms directly into the blank
         // slots of the w_net and q_total equations. Signs come from each term's already-
         // established Work & Heat category (not re-tested here) - the genuine new judgment
@@ -1252,11 +1105,17 @@
             const [whShowFull, setWhShowFull] = useState(false); // Once true, pills reveal their full component name before later morphing to the abbreviation
             const [hOnlyView, setHOnlyView] = useState(false); // When true, the table hides P/T/s/x rows and shows only h
             const [activeEqComponent, setActiveEqComponent] = useState(null); // Which component's equation is currently being built
-            const [eqBuilderClicks, setEqBuilderClicks] = useState([]); // Clicks so far for the active component: [{type:'h', state:n}, {type:'pill'}, ...]
+            // Energy Equations build sequence: click the component's header to start it,
+            // click its before-h (free choice), click the equation-box/term pill to place
+            // the term, then click its after-h (free choice) to commit the attempt.
+            // eqBuilderClicks holds the h-state(s) clicked so far (0, 1, or 2 entries);
+            // eqTermPlaced marks whether the middle term-pill click has happened yet -
+            // the second h-click isn't accepted until it has.
+            const [eqBuilderClicks, setEqBuilderClicks] = useState([]);
+            const [eqTermPlaced, setEqTermPlaced] = useState(false);
             const [equationAttempts, setEquationAttempts] = useState({}); // e.g. {PUMP: {before: 1, after: 2}, ...} - the student's built equation per component
             const [eqCheckResult, setEqCheckResult] = useState(null); // e.g. {PUMP: {beforeCorrect: true, afterCorrect: false}, ...} once checked
             const [eqRevealTier, setEqRevealTier] = useState(0); // 0 = nothing revealed, 1 = which equations are wrong, 2 = which part is wrong
-            const [energyValueIndex, setEnergyValueIndex] = useState(0); // Which of the 6 components we're currently solving (in order)
             const [energyResults, setEnergyResults] = useState({}); // e.g. {PUMP: 10.1, ...} - computed numeric energy values
             // Cycle Performance phase: which component currently sits in each equation slot.
             // Keyed by group ('wnet'/'qtotal') -> array of component names (or null), one per slot.
@@ -1513,7 +1372,6 @@
                         snapshot.equationAttempts = {...equationAttempts};
                         break;
                     case 'energy-values':
-                        snapshot.energyValueIndex = energyValueIndex;
                         snapshot.energyResults = {...energyResults};
                         break;
                     case 'cycle-performance':
@@ -1664,9 +1522,14 @@
             };
 
             // Click-to-build equation handlers (Energy Equations phase)
+            // Click a component's header (e.g. "PUMP") to start or restart building its
+            // equation - this reveals a row of empty pills centered under that component,
+            // and always clears whatever was in progress for it, so it also serves as the
+            // "rebuild this one" action once an attempt already exists.
             const handleEqComponentClick = (name) => {
                 setActiveEqComponent(name);
                 setEqBuilderClicks([]);
+                setEqTermPlaced(false);
                 setEquationAttempts(prev => {
                     const next = { ...prev };
                     delete next[name];
@@ -1674,17 +1537,35 @@
                 });
             };
 
+            // The equation-box tag itself (e.g. "+w_p", in the header row above the
+            // table) only does something mid-build: once the before-h has been
+            // clicked, clicking this tag places the term, unlocking the after-h
+            // click. It's otherwise inert - nothing about its appearance changes
+            // until this click happens.
+            const handleEqTermClick = (name) => {
+                if (activeEqComponent !== name) return;
+                if (eqBuilderClicks.length !== 1) return;
+                if (eqTermPlaced) return;
+                setEqTermPlaced(true);
+            };
+
+            // h-cells are free choice throughout (that's the point of this phase - the
+            // student picks which states bound the component, checked for correctness
+            // only once all six are attempted). The first click is accepted any time a
+            // component is active; the second is only accepted once the term pill has
+            // been placed, which is what enforces the header -> h -> term -> h order.
             const handleEqHClick = (stateNum) => {
                 if (!activeEqComponent) return;
-                if (eqBuilderClicks.length >= 2) return;
-                const newClicks = [...eqBuilderClicks, stateNum];
-                if (newClicks.length === 2) {
+                if (eqBuilderClicks.length === 0) {
+                    setEqBuilderClicks([stateNum]);
+                } else if (eqBuilderClicks.length === 1 && eqTermPlaced) {
+                    const newClicks = [...eqBuilderClicks, stateNum];
                     setEquationAttempts(prev => ({ ...prev, [activeEqComponent]: { before: newClicks[0], after: newClicks[1] } }));
                     setActiveEqComponent(null);
                     setEqBuilderClicks([]);
-                } else {
-                    setEqBuilderClicks(newClicks);
+                    setEqTermPlaced(false);
                 }
+                // else: second h clicked before the term pill was placed - ignored.
             };
 
             const isAllEquationsAttempted = () => {
@@ -1703,6 +1584,21 @@
                 });
                 setEqCheckResult(result);
                 setEqRevealTier(0);
+            };
+
+            // Solve Energy Values: compute one component's energy term from the
+            // equation it was given (built in Energy Equations) plus the actual
+            // h-values looked up for its two states. The rearrange/solve interaction
+            // for this phase is still being designed - for now this just computes the
+            // number directly so the rest of the app (Cycle Performance) has it.
+            const computeEnergyValueFor = (comp) => {
+                const eq = equationAttempts[comp];
+                const cat = energyPlacements[comp];
+                const sign = ENERGY_CATEGORY_DISPLAY[cat][0];
+                const hBeforeVal = parseHValue(givenValues[`state${eq.before}-h`]);
+                const hAfterVal = parseHValue(givenValues[`state${eq.after}-h`]);
+                const result = sign === '+' ? (hAfterVal - hBeforeVal) : (hBeforeVal - hAfterVal);
+                return result.toFixed(1);
             };
 
             const isStateNumberingComplete = () => {
@@ -2020,7 +1916,7 @@
                     : 'Drag FROM pink cells TO connected cells via ISO processes to identify derivable values';
                 if (phase === 'solve-states') return 'Click on a state header to select it. CoolProp needs exactly 2 known properties to find any other property at that state — click the property you want to Find first, then click the 2 properties you\'ll use to get it. You can queue up more than one property to find (reusing the same 2 known properties) before hitting Solve, to calculate several at once. Once a property is solved, you can also drag it across an ISO connection to fill the matching cell at the next state directly — no need to re-solve a value you already know.';
                 if (phase === 'work-heat-id') return 'Drag each pill onto the component it describes. A pill can be used more than once.';
-                if (phase === 'energy-equations') return hOnlyView ? "Click a component's equation box to select it, then click its h-before state and its h-after state." : 'To solve further, we only need enthalpy (h) at each state.';
+                if (phase === 'energy-equations') return hOnlyView ? "Click a component's header to start it - empty pills appear below. Click its h-before state, click the header again to place the term, then click its h-after state." : 'To solve further, we only need enthalpy (h) at each state.';
                 if (phase === 'cycle-performance') return 'Drag each energy term into the equation it belongs to. One term isn\'t needed for either.';
                 return '';
             };
@@ -2153,7 +2049,6 @@
                                         if (snapshot.equationAttempts) setEquationAttempts(snapshot.equationAttempts);
                                         break;
                                     case 'energy-values':
-                                        if (snapshot.energyValueIndex !== undefined) setEnergyValueIndex(snapshot.energyValueIndex);
                                         if (snapshot.energyResults) setEnergyResults(snapshot.energyResults);
                                         break;
                                     case 'cycle-performance':
@@ -2233,11 +2128,11 @@
                                     setEquationAttempts({});
                                     setActiveEqComponent(null);
                                     setEqBuilderClicks([]);
+                                    setEqTermPlaced(false);
                                     setEqCheckResult(null);
                                     setEqRevealTier(0);
                                     break;
                                 case 'energy-values':
-                                    setEnergyValueIndex(0);
                                     setEnergyResults({});
                                     break;
                                 case 'cycle-performance':
@@ -2766,7 +2661,7 @@
                                             <li><span className="font-semibold">1st argument</span> — the property you want to <span className="text-green-700 font-semibold">Find</span></li>
                                             <li><span className="font-semibold">Next 2 pairs</span> — the name and value of each property you're <span className="text-blue-700 font-semibold">using</span> (the two you already know at this state)</li>
                                             <li><span className="font-semibold">Last argument</span> — the working fluid (water, for this cycle)</li>
-                                            <li>This comes from the <span className="italic">state postulate</span>: for a simple compressible substance which defines how many properties are needed to fully describe a system in equilibrium — so once you know 2, CoolProp can find the rest</li>
+                                            <li>This comes from the <span className="italic">state postulate</span>: for a simple compressible substance, any 2 independent properties fully fix the state — so once you know 2, CoolProp can find the rest</li>
                                             <li>It doesn't matter which of your 2 known properties you list first — CoolProp reads them as a pair</li>
                                         </ul>
                                     </div>
@@ -3090,7 +2985,7 @@
                             <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-4 mb-4 text-left max-w-2xl mx-auto">
                                 <p className="text-indigo-900 font-semibold mb-1">Building each component's equation:</p>
                                 <p className="text-indigo-800 text-sm">
-                                    Click a component's equation box in the table (it currently just shows its category, like "+w PUMP") to select it. Then click the h-value at the state right before that component, followed by the state right after it. That builds the energy balance for that component — repeat for all six, then check your work.
+                                    Click a component's colored tag (e.g. "PUMP") to start on it — empty pills appear below the table, centered under that component. Then click the h-value at the state right before it to fill the first pill, click the component's tag again to drop its term into the second pill, and click the h-value at the state right after it. That builds the energy balance for that component — repeat for all six, then check your work.
                                 </p>
                             </div>
                             {!hOnlyView ? (
@@ -3175,105 +3070,49 @@
                         </div>
                     )}
 
-                    {/* Solve Energy Values Phase */}
+                    {/* Solve Energy Values Phase - placeholder. The equations are already
+                        built & verified correct in Energy Equations; how this phase
+                        actually walks through rearranging/solving them is still being
+                        designed, so for now it just computes the six values directly so
+                        Cycle Performance has what it needs. */}
                     {phase === 'energy-values' && (() => {
-                        const comp = ENERGY_COMPONENT_ORDER[energyValueIndex];
-                        const eq = equationAttempts[comp];
-                        const cat = energyPlacements[comp];
-                        const sign = ENERGY_CATEGORY_DISPLAY[cat][0];
-                        const abbrev = ENERGY_ABBREV_NAME[comp];
-                        const alreadySolved = energyResults[comp] !== undefined;
-                        const isLast = energyValueIndex === ENERGY_COMPONENT_ORDER.length - 1;
                         const allSolved = ENERGY_COMPONENT_ORDER.every(c => energyResults[c] !== undefined);
 
-                        if (allSolved && isLast && alreadySolved) {
-                            return (
-                                <div className="bg-white rounded-lg shadow-lg p-6 mb-6 text-center">
-                                    <p className="text-green-700 font-bold text-xl mb-2">
-                                        ✓ All six energy values calculated!
-                                    </p>
-                                    <div className="text-left inline-block mt-2">
-                                        {ENERGY_COMPONENT_ORDER.map(c => (
-                                            <p key={c} className="text-gray-700">
-                                                {ENERGY_ABBREV_NAME[c]} = {energyResults[c]} kJ/kg
-                                            </p>
-                                        ))}
-                                    </div>
-                                    <div className="mt-4 flex gap-3 justify-center">
-                                        <button
-                                            onClick={() => setEnergyValueIndex(i => Math.max(0, i - 1))}
-                                            className="bg-gray-400 hover:bg-gray-500 text-white font-semibold py-2 px-4 rounded-lg"
-                                        >
-                                            ← Review
-                                        </button>
+                        return (
+                            <div className="bg-white rounded-lg shadow-lg p-6 mb-6 text-center">
+                                <h3 className="text-lg font-bold mb-1 text-gray-800">
+                                    Solve for each energy term
+                                </h3>
+                                <p className="text-gray-600 text-sm mb-4 max-w-xl mx-auto">
+                                    (This phase's interaction is still being designed - for now, one click solves all six.)
+                                </p>
+
+                                {!allSolved ? (
+                                    <button
+                                        onClick={() => {
+                                            const allResults = {};
+                                            ENERGY_COMPONENT_ORDER.forEach(c => { allResults[c] = computeEnergyValueFor(c); });
+                                            setEnergyResults(allResults);
+                                            setCompletedPhaseData(cp => ({...cp, 'energy-values': { energyResults: allResults }}));
+                                            setCompletedPhases(cps => cps.includes('energy-values') ? cps : [...cps, 'energy-values']);
+                                        }}
+                                        className="bg-indigo-500 hover:bg-indigo-600 text-white font-semibold py-2 px-5 rounded-lg"
+                                    >
+                                        Calculate all energy values
+                                    </button>
+                                ) : (
+                                    <div className="pt-2">
+                                        <p className="text-green-700 font-bold text-xl mb-4">
+                                            ✓ All six energy values calculated!
+                                        </p>
                                         <button
                                             onClick={() => advancePhase('cycle-performance')}
-                                            className="bg-indigo-500 hover:bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg"
+                                            className="bg-indigo-500 hover:bg-indigo-600 text-white font-semibold py-3 px-6 rounded-lg"
                                         >
                                             Continue to Cycle Performance →
                                         </button>
                                     </div>
-                                </div>
-                            );
-                        }
-
-                        return (
-                            <div className="bg-white rounded-lg shadow-lg p-6 mb-6 text-center">
-                                <p className="text-gray-500 text-sm mb-2">
-                                    Component {energyValueIndex + 1} of {ENERGY_COMPONENT_ORDER.length}
-                                </p>
-                                <h3 className="text-lg font-bold mb-4 text-gray-800">
-                                    {comp}
-                                </h3>
-                                <p className="text-2xl font-semibold mb-4">
-                                    h{eq.before} {sign} {abbrev} = h{eq.after}
-                                </p>
-
-                                {alreadySolved ? (
-                                    <p className="text-green-700 font-bold text-lg mb-4">
-                                        {abbrev} = {energyResults[comp]} kJ/kg
-                                    </p>
-                                ) : (
-                                    <EnergyRearrange
-                                        key={comp}
-                                        comp={comp}
-                                        eq={eq}
-                                        sign={sign}
-                                        abbrev={abbrev}
-                                        hBeforeVal={parseHValue(givenValues[`state${eq.before}-h`])}
-                                        hAfterVal={parseHValue(givenValues[`state${eq.after}-h`])}
-                                        onComplete={(c, value) => {
-                                            setEnergyResults(prev => {
-                                                const next = { ...prev, [c]: value };
-                                                const nowAllSolved = ENERGY_COMPONENT_ORDER.every(k => next[k] !== undefined);
-                                                if (nowAllSolved) {
-                                                    setCompletedPhaseData(cp => ({...cp, 'energy-values': { energyValueIndex, energyResults: next }}));
-                                                    setCompletedPhases(cps => cps.includes('energy-values') ? cps : [...cps, 'energy-values']);
-                                                }
-                                                return next;
-                                            });
-                                        }}
-                                    />
                                 )}
-
-                                <div className="flex gap-3 justify-center">
-                                    {energyValueIndex > 0 && (
-                                        <button
-                                            onClick={() => setEnergyValueIndex(i => i - 1)}
-                                            className="bg-gray-400 hover:bg-gray-500 text-white font-semibold py-2 px-4 rounded-lg"
-                                        >
-                                            ← Back
-                                        </button>
-                                    )}
-                                    {alreadySolved && (
-                                        <button
-                                            onClick={() => setEnergyValueIndex(i => Math.min(ENERGY_COMPONENT_ORDER.length - 1, i + 1))}
-                                            className="bg-indigo-500 hover:bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg"
-                                        >
-                                            {isLast ? 'Finish →' : 'Next component →'}
-                                        </button>
-                                    )}
-                                </div>
                             </div>
                         );
                     })()}
@@ -3509,6 +3348,7 @@
                             eqRevealTier={eqRevealTier}
                             handleEqComponentClick={handleEqComponentClick}
                             handleEqHClick={handleEqHClick}
+                            eqTermPlaced={eqTermPlaced}
                             isoConnections={isoConnections}
                             previewConnection={previewConnection}
                             pinkHighlights={pinkHighlights}
@@ -3888,7 +3728,7 @@
             );
         }
 
-        function TableView({ phase, isoSubStep, componentPlacements, energyPlacements, energyResults, hOnlyView, activeEqComponent, eqBuilderClicks, equationAttempts, eqCheckResult, eqRevealTier, handleEqComponentClick, handleEqHClick, isoConnections, previewConnection, pinkHighlights, blueHighlights, calculatedCells, givenValues, selectedState, clickedCells, solveQueue, currentFind, currentUsing, handleStateClick, handleCellClickForSolving, handleDrop, handleDragOver, handleDragStart, handleMouseEnter, handleMouseLeave, handleDragEnd, dragFromCell, mousePosition, hoveredCell }) {
+        function TableView({ phase, isoSubStep, componentPlacements, energyPlacements, energyResults, hOnlyView, activeEqComponent, eqBuilderClicks, equationAttempts, eqCheckResult, eqRevealTier, handleEqComponentClick, handleEqHClick, eqTermPlaced, isoConnections, previewConnection, pinkHighlights, blueHighlights, calculatedCells, givenValues, selectedState, clickedCells, solveQueue, currentFind, currentUsing, handleStateClick, handleCellClickForSolving, handleDrop, handleDragOver, handleDragStart, handleMouseEnter, handleMouseLeave, handleDragEnd, dragFromCell, mousePosition, hoveredCell }) {
             const tableRef = React.useRef(null);
             
             return (
@@ -3996,28 +3836,32 @@
                                         const isEqPhase = phase === 'energy-equations';
                                         const isActive = activeEqComponent === comp;
                                         const attempt = equationAttempts && equationAttempts[comp];
-                                        const hClicks = isActive ? eqBuilderClicks : [];
                                         const checkResult = eqCheckResult && eqCheckResult[comp];
                                         const isCorrect = checkResult && checkResult.beforeCorrect && checkResult.afterCorrect;
                                         const isWrong = checkResult && !isCorrect;
                                         const beforeFlagged = isWrong && eqRevealTier >= 2 && !checkResult.beforeCorrect;
                                         const afterFlagged = isWrong && eqRevealTier >= 2 && !checkResult.afterCorrect;
 
+                                        const isSolved = energyResults && energyResults[comp] !== undefined;
+
+                                        // This tag is pure display now - the actual build happens in the
+                                        // pill row that appears below the h-values, centered under this
+                                        // component. It only reacts once the attempt has been committed
+                                        // (and later, checked).
                                         let ringClass = '';
-                                        if (isActive) ringClass = 'ring-2 ring-orange-200';
-                                        else if (isCorrect) ringClass = 'ring-2 ring-green-500';
+                                        if (isCorrect) ringClass = 'ring-2 ring-green-500';
                                         else if (isWrong && eqRevealTier >= 1) ringClass = 'ring-2 ring-red-400';
+                                        else if (isActive) ringClass = 'ring-2 ring-orange-300';
 
                                         return (
                                             <React.Fragment key={comp}>
                                                 <td className="text-center">
                                                     {cat && (
                                                         <span
-                                                            onClick={isEqPhase ? () => handleEqComponentClick(comp) : undefined}
-                                                            className={`inline-block whitespace-nowrap px-2 py-1 rounded-full text-xs font-bold border-2 ${ringClass} ${isEqPhase ? 'cursor-pointer hover:ring-2 hover:ring-orange-300' : ''}`}
+                                                            className={`inline-block whitespace-nowrap px-2 py-1 rounded-full text-xs font-bold border-2 ${ringClass}`}
                                                             style={{ backgroundColor: style.bg, borderColor: style.border, color: style.text }}
                                                         >
-                                                            {energyResults && energyResults[comp] !== undefined ? (
+                                                            {isSolved ? (
                                                                 `${abbrev} = ${energyResults[comp]}`
                                                             ) : isEqPhase && attempt ? (
                                                                 <>
@@ -4026,8 +3870,6 @@
                                                                     <span style={afterFlagged ? { textDecoration: 'underline', color: '#b91c1c' } : undefined}>h{attempt.after}</span>
                                                                     {isCorrect ? ' \u2713' : ''}
                                                                 </>
-                                                            ) : (isEqPhase && isActive) ? (
-                                                                `${hClicks[0] !== undefined ? `h${hClicks[0]}` : '?'} ${sign} ${abbrev} = ${hClicks[1] !== undefined ? `h${hClicks[1]}` : '?'}`
                                                             ) : (
                                                                 `${sign}${abbrev}`
                                                             )}
@@ -4070,6 +3912,7 @@
                                 activeEqComponent={activeEqComponent}
                                 eqBuilderClicks={eqBuilderClicks}
                                 handleEqHClick={handleEqHClick}
+                                eqTermPlaced={eqTermPlaced}
                             />
                             )}
                             
@@ -4101,6 +3944,7 @@
                                 activeEqComponent={activeEqComponent}
                                 eqBuilderClicks={eqBuilderClicks}
                                 handleEqHClick={handleEqHClick}
+                                eqTermPlaced={eqTermPlaced}
                             />
                             )}
                             
@@ -4131,8 +3975,22 @@
                                 activeEqComponent={activeEqComponent}
                                 eqBuilderClicks={eqBuilderClicks}
                                 handleEqHClick={handleEqHClick}
+                                eqTermPlaced={eqTermPlaced}
                             />
-                            
+
+                            {/* Energy Equations: empty pills reveal here, below the h-values,
+                                centered under whichever component is currently being built.
+                                Disappears once committed - the finished equation then lives
+                                in the component's tag in the header row above. */}
+                            {phase === 'energy-equations' && (
+                                <EqBuildRow
+                                    activeEqComponent={activeEqComponent}
+                                    eqBuilderClicks={eqBuilderClicks}
+                                    eqTermPlaced={eqTermPlaced}
+                                    energyPlacements={energyPlacements}
+                                />
+                            )}
+
                             {/* Entropy Row */}
                             {!hOnlyView && (
                             <PropertyRow 
@@ -4161,6 +4019,7 @@
                                 activeEqComponent={activeEqComponent}
                                 eqBuilderClicks={eqBuilderClicks}
                                 handleEqHClick={handleEqHClick}
+                                eqTermPlaced={eqTermPlaced}
                             />
                             )}
                             
@@ -4192,6 +4051,7 @@
                                 activeEqComponent={activeEqComponent}
                                 eqBuilderClicks={eqBuilderClicks}
                                 handleEqHClick={handleEqHClick}
+                                eqTermPlaced={eqTermPlaced}
                             />
                             )}
                         </tbody>
@@ -4202,7 +4062,7 @@
 
         function ComponentSlot({ id, placement, phase, activeEqComponent, equationAttempts, handleEqComponentClick }) {
             const hasComponent = !!placement;
-            
+
             // Map each component to its colors from the cycle diagram
             const getComponentColors = (componentName) => {
                 const colorMap = {
@@ -4218,11 +4078,15 @@
 
             const isEqPhase = phase === 'energy-equations';
             const isActive = isEqPhase && hasComponent && activeEqComponent === placement;
-            
+            // Clicking the header starts (or restarts) building this component's
+            // equation - always available in this phase, even once an attempt already
+            // exists, since re-clicking it is how a wrong equation gets rebuilt.
+            const isEqClickable = isEqPhase && hasComponent;
+
             let slotClass = "px-2 py-1 text-sm font-semibold text-center rounded-lg transition min-h-[24px] flex items-center justify-center";
             // Uniform width matching widest component (CONDENSER = 100px)
             slotClass += " w-[100px]";
-            
+
             if (hasComponent) {
                 // Colored background and border with black text, matching cycle diagram
                 slotClass += " border-2 text-black";
@@ -4233,23 +4097,100 @@
             if (isActive) {
                 slotClass += " ring-4 ring-orange-400";
             }
-            
-            const customStyle = hasComponent ? { 
+            if (isEqClickable) {
+                slotClass += " cursor-pointer hover:ring-4 hover:ring-orange-300";
+            }
+
+            const customStyle = hasComponent ? {
                 backgroundColor: getComponentColors(placement).bg,
                 borderColor: getComponentColors(placement).border
             } : {};
-            
+
             return (
                 <th
                     className={slotClass}
                     style={customStyle}
+                    onClick={isEqClickable ? () => handleEqComponentClick(placement) : undefined}
                 >
                     {hasComponent ? placement : ''}
                 </th>
             );
         }
 
-        function PropertyRow({ property, labels, phase, isoSubStep, isoConnections, previewConnection, pinkHighlights, blueHighlights, calculatedCells, givenValues, selectedState, clickedCells, solveQueue, currentFind, currentUsing, handleCellClickForSolving, handleDrop, handleDragOver, handleDragStart, handleMouseEnter, handleMouseLeave, handleDragEnd, activeEqComponent, eqBuilderClicks, handleEqHClick }) {
+        // The build-in-progress row for Energy Equations: a single set of three
+        // empty pills (before-h, term, after-h) that fill in one at a time as the
+        // student clicks, positioned in a table row right below the h-values and
+        // horizontally centered under whichever component is currently active.
+        // Nothing shows here once a component's equation is committed - the
+        // finished result lives in that component's tag in the header row instead.
+        function EqBuildRow({ activeEqComponent, eqBuilderClicks, eqTermPlaced, energyPlacements }) {
+            const COMPONENT_ORDER = ['PUMP', 'BOILER', 'HP TURB', 'REHEATER', 'LP TURB', 'CONDENSER'];
+            if (!activeEqComponent) {
+                // Keep the row's height reserved so the table doesn't jump when a
+                // component becomes active/inactive.
+                return <tr style={{ height: '2.5rem' }}><td colSpan={13}></td></tr>;
+            }
+
+            const cat = energyPlacements[activeEqComponent];
+            const sign = cat ? ENERGY_CATEGORY_DISPLAY[cat][0] : '';
+            const abbrev = ENERGY_ABBREV_NAME[activeEqComponent];
+            const beforeFilled = eqBuilderClicks.length >= 1;
+            const termFilled = eqTermPlaced;
+
+            const pill = (filled, content, key) => (
+                <span
+                    key={key}
+                    className={`inline-flex items-center justify-center min-w-[2.75rem] px-2 py-1 rounded-full text-xs font-bold border-2 ${filled ? 'energy-box-animate' : ''}`}
+                    style={filled
+                        ? { backgroundColor: '#e0e7ff', borderColor: '#4338ca', color: '#312e81' }
+                        : { backgroundColor: 'white', borderColor: '#cbd5e1', color: '#cbd5e1', borderStyle: 'dashed' }}
+                >
+                    {filled ? content : '?'}
+                </span>
+            );
+
+            const equationPills = (
+                <div className="flex items-center justify-center gap-1.5 whitespace-nowrap bg-white/90 rounded-lg shadow-md border border-gray-200 px-2 py-1.5" style={{ pointerEvents: 'none' }}>
+                    {pill(beforeFilled, beforeFilled ? `h${eqBuilderClicks[0]}` : null, 'before')}
+                    {pill(termFilled, termFilled ? `${sign}${abbrev}` : null, 'term')}
+                    <span className="font-bold text-gray-500 text-sm">=</span>
+                    {pill(false, null, 'after')}
+                </div>
+            );
+
+            // Build one <td> per gap-column in the table (6 total, same positions as
+            // the ComponentSlot cells above), with an absolutely-positioned overlay
+            // only in the active component's column so the pills sit centered under
+            // it without being squeezed into that column's own narrow width.
+            const cells = [];
+            cells.push(<td key="label"></td>);
+            COMPONENT_ORDER.forEach((comp, i) => {
+                cells.push(<td key={`state${i + 1}`}></td>);
+                const isLast = i === COMPONENT_ORDER.length - 1;
+                const isThisActive = comp === activeEqComponent;
+                cells.push(
+                    <td key={`gap${i}`} className="relative w-24" style={{ position: 'relative' }}>
+                        {isThisActive && (
+                            <div
+                                className="absolute flex justify-center"
+                                style={{
+                                    left: isLast ? '-150px' : '-110px',
+                                    right: isLast ? '0px' : '-110px',
+                                    top: '0.25rem',
+                                    zIndex: 20,
+                                }}
+                            >
+                                {equationPills}
+                            </div>
+                        )}
+                    </td>
+                );
+            });
+
+            return <tr style={{ height: '2.5rem' }}>{cells}</tr>;
+        }
+
+        function PropertyRow({ property, labels, phase, isoSubStep, isoConnections, previewConnection, pinkHighlights, blueHighlights, calculatedCells, givenValues, selectedState, clickedCells, solveQueue, currentFind, currentUsing, handleCellClickForSolving, handleDrop, handleDragOver, handleDragStart, handleMouseEnter, handleMouseLeave, handleDragEnd, activeEqComponent, eqBuilderClicks, handleEqHClick, eqTermPlaced }) {
             const states = [1, 2, 3, 4, 5, 6];
             const components = ['PUMP', 'BOILER', 'HP TURB', 'REHEATER', 'LP TURB', 'CONDENSER'];
             
@@ -4296,6 +4237,7 @@
                                     activeEqComponent={activeEqComponent}
                                     eqBuilderClicks={eqBuilderClicks}
                                     handleEqHClick={handleEqHClick}
+                                    eqTermPlaced={eqTermPlaced}
                                 />
                                 {idx < 5 && (
                                     showSpanningBoxes ? 
@@ -4491,7 +4433,7 @@
             return null;
         }
 
-        function Cell({ id, label, isEmpty, phase, isoSubStep, isoConnections, previewConnection, pinkHighlights, blueHighlights, calculatedCells, givenValues, selectedState, clickedCells, solveQueue, currentFind, currentUsing, handleCellClickForSolving, handleDrop, handleDragOver, handleDragStart, handleMouseEnter, handleMouseLeave, handleDragEnd, activeEqComponent, eqBuilderClicks, handleEqHClick }) {
+        function Cell({ id, label, isEmpty, phase, isoSubStep, isoConnections, previewConnection, pinkHighlights, blueHighlights, calculatedCells, givenValues, selectedState, clickedCells, solveQueue, currentFind, currentUsing, handleCellClickForSolving, handleDrop, handleDragOver, handleDragStart, handleMouseEnter, handleMouseLeave, handleDragEnd, activeEqComponent, eqBuilderClicks, handleEqHClick, eqTermPlaced }) {
             if (isEmpty) {
                 return <td className="w-40 border-2 border-gray-200 bg-gray-50 p-2 text-sm rounded-lg"></td>;
             }
@@ -4571,15 +4513,18 @@
                 cellClass += " cursor-pointer hover:ring-2 hover:ring-orange-300";
             }
 
-            // Make h-cells clickable in the energy-equations phase, for any state,
-            // only while a component is active and we're expecting an h-click (1st or 3rd click)
+            // Make h-cells clickable in the energy-equations phase, for any state -
+            // free choice, since picking which states bound the component is the
+            // point. The first click (before-h) is accepted any time a component is
+            // active; the second (after-h) only once the term pill has been placed,
+            // which enforces the header -> h -> term -> h order.
             const isClickableForEq = phase === 'energy-equations' && property === 'h' && !!activeEqComponent &&
-                eqBuilderClicks && eqBuilderClicks.length < 2;
+                (eqBuilderClicks.length === 0 || (eqBuilderClicks.length === 1 && eqTermPlaced));
 
             if (isClickableForEq) {
                 cellClass += " cursor-pointer hover:ring-2 hover:ring-indigo-300";
             }
-            
+
             // Add grab cursor for draggable cells in solve-states
             if (isDraggable && phase === 'solve-states' && hasValue) {
                 cellClass += " cursor-grab";
